@@ -8,6 +8,9 @@ from langchain.prompts import PromptTemplate, ChatPromptTemplate # Add ChatPromp
 from langchain.chains import LLMChain
 from app.utils import chunk_text
 from langchain.schema import HumanMessage #For creating message list
+import subprocess
+import os
+import re
 
 def load_llm(model_name, api_key=None, temperature=0):
     """Loads an LLM instance."""
@@ -130,34 +133,72 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
 
     if prompt_template is None:
         prompt_template = """
-        Generate Manim code to display the following text on the screen:
+        You are a Manim code generator. Your ONLY task is to generate Manim code to display the following text on the screen:
 
         Text: {concept_description}
 
-        Use the `Text` class in Manim.  Create a class called `TempScene` that inherits from `Scene`.
-        Here's a basic Manim example to follow:
+        Generate Manim code that:
 
+        - Creates a class called `TempScene` that inherits from `Scene`.
+        - Includes all necessary imports (e.g., `from manim import *`).
+        - Implements the `construct` method.
+        - Uses the `Text` class to display the text.
+        - Centers the text on the screen. Use `text.move_to(ORIGIN)`.
+        - Sets the text color to blue. Use `color=BLUE`.
+        - Includes a `self.add(text)` line to add the text to the scene.
+        - Includes a `self.wait(1)` line to pause the scene for 1 second.
+
+        Here's an example of Manim code that displays text:
+        ```python
+        from manim import *
+
+        class TempScene(Scene):
+            def construct(self):
+                text = Text("Hello, Manim!", color=BLUE)
+                text.move_to(ORIGIN)
+                self.add(text)
+                self.wait(1)
+
+        # Example 2: Draw a circle and square
         ```python
         from manim import *
 
         class TempScene(Scene):
             def construct(self):
                 circle = Circle()
+                square = Square()
                 self.play(Create(circle))
+                self.play(Transform(circle, square))
                 self.wait(1)
         ```
 
+        # Example 3: Show a simple equation
+        ```python
+        from manim import *
+
+        class TempScene(Scene):
+            def construct(self):
+                equation = MathTex(r"E=mc^2")
+                self.play(Write(equation))
+                self.wait(1)
+        ```
+        Generate Manim code that:
+        - Creates a class called `TempScene` that inherits from `Scene`.
+        - Includes all necessary imports (e.g., `from manim import *`).
+        - Implements the `construct` method.
+        - Creates the visualization described by the "Visual Cue" above.
+        - Uses appropriate Manim objects and animations.
+        - Is well-commented and easy to understand.
+
         Manim Code:
         """
-        # print("manim prompt", prompt_template) #debugging
     prompt = ChatPromptTemplate.from_template(prompt_template)
     llm_chain = LLMChain(prompt=prompt, llm=llm)
-    manim_code = llm_chain.invoke({"concept_description": concept_description}) # Pass directly
+    manim_code = llm_chain.invoke({"concept_description": concept_description})
     return manim_code
 
 
 def run_manim_code(manim_code):
-
     """
     Runs the given Manim code and returns the path to the output video file.
     Handles potential errors during Manim execution.
@@ -199,7 +240,7 @@ def run_manim_code(manim_code):
 
     except subprocess.CalledProcessError as e:
         error_message = f"Manim execution failed:\n{e.stderr}"
-        raise Exception(error_message)  # Re-raise for handling in main.py
+        raise e # Raise the subprocess error
     except FileNotFoundError as e:
         raise e
     finally:
