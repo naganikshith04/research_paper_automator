@@ -18,3 +18,5 @@ venv/
 # IDE and editor specific
 .idea/
 .vscode/
+
+media/

@@ -130,45 +130,33 @@ def generate_video_script(llm, summary, key_ideas, prompt_template=None):
 
 def generate_manim_code(llm, concept_description, prompt_template=None):
     """Generates Manim code to visualize a given concept."""
-
     if prompt_template is None:
         prompt_template = """
-        You are a Manim code generator. Generate only the python code no delimeter "```" at the start and end. Your ONLY task is to generate Manim code to display the following text on the screen:
+        You are a Manim code generator. Your task is to generate Manim code to create a short animation based on the following description:
 
-        Text: {concept_description}
+        Visual Cue: {{concept_description}}
 
-        Generate Manim code that:
+        Here are some examples of Manim code:
 
-        - Creates a class called `TempScene` that inherits from `Scene`.
-        - Includes all necessary imports (e.g., `from manim import *`).
-        - Implements the `construct` method.
-        - Uses the `Text` class to display the text.
-        - Centers the text on the screen. Use `text.move_to(ORIGIN)`.
-        - Sets the text color to blue. Use `color=BLUE`.
-        - Includes a `self.add(text)` line to add the text to the scene.
-        - Includes a `self.wait(1)` line to pause the scene for 1 second.
-
-        Here's an example of Manim code that displays text:
-        
+        # Example 1: Display centered text with specific font and size
+        ```python
         from manim import *
 
         class TempScene(Scene):
             def construct(self):
-                text = Text("Hello, Manim!", color=BLUE)
+                text = Text("Hello, Manim!", color=BLUE, font_size=48, font="Arial")
                 text.move_to(ORIGIN)
                 self.add(text)
-                self.wait(1)
-
+        self.wait(1)
         # Example 2: Draw a circle and square
         
         from manim import *
 
         class TempScene(Scene):
             def construct(self):
-                circle = Circle()
-                square = Square()
-                self.play(Create(circle))
-                self.play(Transform(circle, square))
+                text = Text("Title", color=WHITE, font_size=60)
+                text.to_edge(UP) # Move to the top edge
+                self.play(FadeIn(text, run_time=2)) #Fade in
                 self.wait(1)
         
 
@@ -178,8 +166,16 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
 
         class TempScene(Scene):
             def construct(self):
-                equation = MathTex(r"E=mc^2")
-                self.play(Write(equation))
+                title = Text("My Diagram", font_size=48, color=YELLOW)
+                title.to_edge(UP)
+                self.play(Write(title))
+
+                circle = Circle(color=RED)
+                square = Square(color=GREEN)
+                square.next_to(circle, RIGHT)
+
+                self.play(Create(circle))
+                self.play(Create(square))
                 self.wait(1)
         
         Generate Manim code that:
@@ -189,64 +185,98 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
         - Creates the visualization described by the "Visual Cue" above.
         - Uses appropriate Manim objects and animations.
         - Is well-commented and easy to understand.
+        ABSOLUTELY NO EXTRA TEXT OR EXPLANATIONS!
+        OUTPUT ONLY VALID PYTHON CODE.
+        DO NOT INCLUDE ANY MARKDOWN CODE BLOCK DELIMITERS (```).
+        DO NOT INCLUDE ANY INTRODUCTORY OR CONCLUDING PHRASES.
+        ONLY PYTHON CODE
 
         Manim Code:
         """
     prompt = ChatPromptTemplate.from_template(prompt_template)
     llm_chain = LLMChain(prompt=prompt, llm=llm)
     manim_code = llm_chain.invoke({"concept_description": concept_description})
-    return manim_code
+    # --- Add post-processing to remove extraneous text ---
+    manim_code_str = manim_code['text']
+    manim_code_str = manim_code_str.replace("`python", "").replace("`", "").strip()
+
+    # Additional cleanup: Find the first 'from manim' and keep only that part
+    start_index = manim_code_str.find("from manim")
+    if start_index != -1:
+        manim_code_str = manim_code_str[start_index:]
+
+    return {"text": manim_code_str} # Return the cleaned code
 
 
-def run_manim_code(manim_code):
+
+
+import subprocess
+import os
+import re
+import glob
+
+def run_manim_code(manim_code, scene_name="TempScene"):
     """
     Runs the given Manim code and returns the path to the output video file.
     Handles potential errors during Manim execution.
     """
 
-    # 1. Create a temporary Python file
-    temp_file_path = "temp_manim_scene.py"
+    temp_file_path = f"temp_manim_scene_{scene_name}.py"
     with open(temp_file_path, "w") as f:
         f.write(manim_code)
 
-    # 2. Construct the Manim command (extract scene name and use it)
+    # --- Extract Scene Name Using Regex ---
     match = re.search(r"class\s+([a-zA-Z0-9_]+)\s*\(.*Scene.*\):", manim_code)
     if match:
-        scene_name = match.group(1)
+        extracted_scene_name = match.group(1)
     else:
         raise ValueError("Could not find Scene class name in Manim code.")
+    # --- End Regex Extraction ---
 
     command = [
         "manim",
         temp_file_path,
-        scene_name,  # Use the extracted scene name
-        "-ql",         # Low quality for faster rendering during development
-        "--media_dir", "./media" #specify media directory
+        extracted_scene_name,  # Use extracted_scene_name
+        "-ql",
+        "--media_dir", "./media"
     ]
 
-    # 3. Run Manim using subprocess
     try:
         process = subprocess.run(command, capture_output=True, text=True, check=True)
         print(process.stdout)
+        video_file_name = f"{extracted_scene_name}.mp4"
 
-        # 4. Determine the output video file path
-        video_file_name = f"{scene_name}.mp4" # use scene name
-        video_file_path = os.path.join("media", "videos", temp_file_path.replace(".py",""), "480p15", video_file_name)
+        # Find video file using glob, much safer.
+        video_file_path = os.path.join("media", "videos", temp_file_path.replace(".py", ""), "480p15", "**", video_file_name)
+        video_files = glob.glob(video_file_path, recursive=True)
 
-
-        if not os.path.exists(video_file_path):
-            raise FileNotFoundError(f"Manim output video not found at {video_file_path}")
+        if not video_files: #if list is empty
+            raise FileNotFoundError(f"Manim output video not found for scene {scene_name}")
+        video_file_path = video_files[0] #Get the first match
+        #Make it relative
+        video_file_path = os.path.relpath(video_file_path, start=os.path.dirname(__file__))
+        video_file_path = video_file_path.replace("\\","/")
         return video_file_path
 
     except subprocess.CalledProcessError as e:
-        error_message = f"Manim execution failed:\n{e.stderr}"
-        raise e # Raise the subprocess error
+        print(f"Manim command: {e.cmd}")
+        print(f"Manim stdout: {e.stdout}")
+        print(f"Manim stderr: {e.stderr}")
+        raise e
     except FileNotFoundError as e:
         raise e
     finally:
-        # 5. Clean up the temporary file
         try:
             os.remove(temp_file_path)
         except OSError:
             pass
+
+
+
+
+
+
+
+
+
 
