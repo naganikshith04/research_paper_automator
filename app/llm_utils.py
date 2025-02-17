@@ -133,7 +133,7 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
 
     if prompt_template is None:
         prompt_template = """
-        You are a Manim code generator. Your ONLY task is to generate Manim code to display the following text on the screen:
+        You are a Manim code generator. Generate only the python code no delimeter "```" at the start and end. Your ONLY task is to generate Manim code to display the following text on the screen:
 
         Text: {concept_description}
 
@@ -149,7 +149,7 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
         - Includes a `self.wait(1)` line to pause the scene for 1 second.
 
         Here's an example of Manim code that displays text:
-        ```python
+        
         from manim import *
 
         class TempScene(Scene):
@@ -160,7 +160,7 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
                 self.wait(1)
 
         # Example 2: Draw a circle and square
-        ```python
+        
         from manim import *
 
         class TempScene(Scene):
@@ -170,10 +170,10 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
                 self.play(Create(circle))
                 self.play(Transform(circle, square))
                 self.wait(1)
-        ```
+        
 
         # Example 3: Show a simple equation
-        ```python
+        
         from manim import *
 
         class TempScene(Scene):
@@ -181,7 +181,7 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
                 equation = MathTex(r"E=mc^2")
                 self.play(Write(equation))
                 self.wait(1)
-        ```
+        
         Generate Manim code that:
         - Creates a class called `TempScene` that inherits from `Scene`.
         - Includes all necessary imports (e.g., `from manim import *`).
