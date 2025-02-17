@@ -1,3 +1,4 @@
+import glob
 import os
 from dotenv import load_dotenv
 # from langchain.llms import OpenAI  # OLD - Remove this line
@@ -210,11 +211,6 @@ def generate_manim_code(llm, concept_description, prompt_template=None):
 
 
 
-import subprocess
-import os
-import re
-import glob
-
 def run_manim_code(manim_code, scene_name="TempScene"):
     """
     Runs the given Manim code and returns the path to the output video file.
@@ -236,42 +232,43 @@ def run_manim_code(manim_code, scene_name="TempScene"):
     command = [
         "manim",
         temp_file_path,
-        extracted_scene_name,  # Use extracted_scene_name
-        "-ql",
+        extracted_scene_name,
+        "-ql",  # Keep -ql for faster rendering during development
         "--media_dir", "./media"
     ]
 
     try:
         process = subprocess.run(command, capture_output=True, text=True, check=True)
         print(process.stdout)
+
+        # --- Find the Video File (Robustly) ---
         video_file_name = f"{extracted_scene_name}.mp4"
+        base_name = os.path.splitext(os.path.basename(temp_file_path))[0]
 
-        # Find video file using glob, much safer.
-        video_file_path = os.path.join("media", "videos", temp_file_path.replace(".py", ""), "480p15", "**", video_file_name)
-        video_files = glob.glob(video_file_path, recursive=True)
+        # Search for the video file within the 'media/videos/...' directory
+        # Use glob to find the subdirectory (whatever its name is)
+        search_path = os.path.join("media", "videos", base_name, "*", video_file_name) #removed "480p15"
+        video_files = glob.glob(search_path, recursive=True)  # recursive=True is important
 
-        if not video_files: #if list is empty
-            raise FileNotFoundError(f"Manim output video not found for scene {scene_name}")
-        video_file_path = video_files[0] #Get the first match
-        #Make it relative
-        video_file_path = os.path.relpath(video_file_path, start=os.path.dirname(__file__))
-        video_file_path = video_file_path.replace("\\","/")
+        if not video_files:
+            raise FileNotFoundError(f"Manim output video not found for scene {scene_name}.  Expected at: {search_path}")
+
+        video_file_path = video_files[0]  # Get the first matching file (should only be one)
         return video_file_path
 
     except subprocess.CalledProcessError as e:
         print(f"Manim command: {e.cmd}")
         print(f"Manim stdout: {e.stdout}")
         print(f"Manim stderr: {e.stderr}")
-        raise e
+        raise e  # Re-raise the original exception
     except FileNotFoundError as e:
         raise e
     finally:
+        # Clean up the temporary file
         try:
             os.remove(temp_file_path)
         except OSError:
             pass
-
-
 
 
 
